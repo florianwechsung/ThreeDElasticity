@@ -28,7 +28,7 @@ if dim == 2:
     # base = Mesh("mesh2d.msh", distribution_parameters=distribution_parameters)
 elif dim == 3:
     base = UnitCubeMesh(N, N, N, distribution_parameters=distribution_parameters)
-    # base = Mesh("cube-1.msh", distribution_parameters=distribution_parameters)
+    base = Mesh("cube.msh", distribution_parameters=distribution_parameters)
 
 if args.mh == "bary":
     mh = BaryMeshHierarchy(base, nref,
@@ -78,14 +78,14 @@ warning("Boundary condition ready.")
 # import sys
 # sys.exit()
 sp = {
-       "mat_type": "matfree",
-       "pmat_type": "aij",
+       "mat_type": "aij",
+       # "pmat_type": "aij",
        "snes_type": "ksponly",
-       "ksp_type": "gmres",
-       "ksp_rtol": 1.0e-13,
+       "ksp_type": "cg",
+       "ksp_rtol": 1.0e-10,
        "ksp_atol": 0.0,
        "ksp_max_it": 1000,
-       "ksp_monitor_true_residual": None,
+       # "ksp_monitor_true_residual": None,
        "ksp_converged_reason": None,
        "ksp_norm_type": "unpreconditioned",
        # "pc_type": "lu",
@@ -114,13 +114,14 @@ sp = {
        "mg_levels_patch_sub_pc_type": "lu",
      }
 
-pvd = File("output/u_ex-dim-%i-k-%i-%s-unstructured.pvd" % (args.dim, args.k, args.mh))
+pvd = File("output/u_ex-dim-%i-k-%i-%s.pvd" % (args.dim, args.k, args.mh))
 pvd.write(u.interpolate(u_ex))
 pvd = File("output/output-dim-%i-k-%i-%s-unstructured.pvd" % (args.dim, args.k, args.mh))
 u.rename("Solution")
 
 # for gamma_ in [10000000]:
-for gamma_ in [0., 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000]:
+# for gamma_ in [0., 0.1, 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000]:
+for gamma_ in [0., 1, 100, 10000, 1000000, 1e7]:
     gamma.assign(gamma_)
     u.assign(0)
     warning("Launching solve for gamma = %s." % gamma_)
