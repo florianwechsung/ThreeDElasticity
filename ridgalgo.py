@@ -38,6 +38,10 @@ if (mswich == 3):
 if (mswich == 4):
     mesh = UnitCubeMesh(meshsize, meshsize, meshsize)
     domainstr = "Cube"
+if (mswich == 5):
+    mesh = Mesh("cube-%i.msh" % meshsize)
+    meshsize = 1./meshsize
+    domainstr = "Cube-Unstructured"
 
 V = VectorFunctionSpace(mesh, "Lagrange", kdeg)
 # define boundary condition
@@ -62,7 +66,9 @@ a = inner(grad(u), grad(v))*dx
 u = Function(V)
 bo = div(uold)*div(v)*dx 
 sp = {"ksp_type": "cg", "pc_type": "lu", "pc_factor_mat_solver_type": "mumps"}
-solve(a == bo, u, bc, solver_parameters=sp)
+a_solver = LinearSolver(assemble(a, bcs=bc), solver_parameters=sp)
+a_solver.solve(u, assemble(bo))
+# solve(a == bo, u, bc, solver_parameters=sp)
 unorm=sqrt(assemble(inner(grad(u), grad(u)) * dx))
 uold=Function(V)
 #uold.vector().axpy(1.0, u.vector())
@@ -75,31 +81,38 @@ zs=0
 iters = 0;
 rip=10000.0
 olam=0.0
+zu = TrialFunction(V)
+za_solver = LinearSolver(assemble(inner(grad(zu), grad(v))*dx + rip*div(zu)*div(v)*dx, bcs=bc), solver_parameters=sp)
 while iters < max_iters or dlam > 1e-7:
 # Scott-Vogelius iterated penalty method
-    zu = TrialFunction(V)
-    ipmters = 0; ipmax_iters = 100; div_u_norm = 1
-    w  = Function(V)
-    za = inner(grad(zu), grad(v))*dx + rip*div(zu)*div(v)*dx 
-    while ipmters < ipmax_iters and div_u_norm > 1e-14:
-    # solve and update w
-        zu  = Function(V)
-        bz = inner(grad(uold),grad(v))*dx - div(w)*div(v)*dx
-        solve(za == bz,zu,bc, solver_parameters=sp)
-        w.vector().axpy(rip,zu.vector())
-    # find the L^2 norm of div(u) to check stopping condition
-        div_u_norm = sqrt(assemble(div(zu)*div(zu)*dx(mesh)))
-        # print("   IPM iter_no=",ipmters,"div_u_norm="," %.2e"%div_u_norm)
-        ipmters += 1
-    znorm = sqrt(assemble(inner(grad(zu),grad(zu))*dx(mesh)))
-    print("%   IPM iters=",ipmters,"div_z_norm="," %.2e"%div_u_norm)
-    tenz=1000000000000.0*znorm
-    if (tenz > unorm):
-        zs+=1
-        print("subtracting off the projection onto the div-free space")
-        uold.vector().axpy(-1.0, zu.vector())
+    if iters % 10 == 0:
+        ipmters = 0; ipmax_iters = 1000; div_u_norm = 1
+        w  = Function(V)
+        za = inner(grad(zu), grad(v))*dx + rip*div(zu)*div(v)*dx 
+        while ipmters < ipmax_iters and div_u_norm > 1e-14:
+        # solve and update w
+            zu  = Function(V)
+            bz = inner(grad(uold),grad(v))*dx - div(w)*div(v)*dx
+            # solve(za == bz,zu,bc, solver_parameters=sp)
+            za_solver.solve(zu, assemble(bz))
+            w.vector().axpy(rip,zu.vector())
+        # find the L^2 norm of div(u) to check stopping condition
+            div_u_norm = sqrt(assemble(div(zu)*div(zu)*dx(mesh)))
+            print("   IPM iter_no=",ipmters,"div_u_norm="," %.2e"%div_u_norm)
+            ipmters += 1
+        if ipmters >= ipmax_iters:
+            print("IPM failed")
+            import sys; sys.exit()
+        znorm = sqrt(assemble(inner(grad(zu),grad(zu))*dx(mesh)))
+        print("%   IPM iters=",ipmters,"div_z_norm="," %.2e"%div_u_norm)
+        tenz=1000000000000.0*znorm
+        if (tenz > unorm):
+            zs+=1
+            print("subtracting off the projection onto the div-free space")
+            uold.vector().axpy(-1.0, zu.vector())
     b = div(uold)*div(v)*dx - mu*inner(grad(uold), grad(v))*dx
-    solve(a == b, u, bc, solver_parameters=sp)
+    # solve(a == b, u, bc, solver_parameters=sp)
+    a_solver.solve(u, assemble(b))
     unorm=sqrt(assemble(inner(grad(u), grad(u)) * dx))
     dunrm=sqrt(assemble(inner(div(u), div(u)) * dx))
     lam=dunrm/unorm
